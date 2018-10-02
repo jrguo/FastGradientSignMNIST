@@ -92,7 +92,7 @@ def evaluate_model(session, model, test_imgs, test_labels):
 	
 	return count / len(test_labels)
 
-def generate_adv(model, adv, input_img, target_class, label=1):
+def generate_adv(model, adv, input_img, target_class, num=0, label=1, save=True):
 	input_img_arr = [input_img]
 	adv_images = [input_img]
 
@@ -112,7 +112,8 @@ def generate_adv(model, adv, input_img, target_class, label=1):
 	adv_img = adv_images[0]
 
 	# Save image
-	matplotlib.pyplot.imsave('advimgs/target_' + str(target_class) + '_base_' + str(label) + '.png', adv_img)
+	if save:
+		matplotlib.pyplot.imsave('advimgs/target_' + str(target_class) + '_base_' + str(label) + '_' + str(num) + '.png', adv_img)
 
 	return adv_img
 
@@ -152,7 +153,7 @@ for i in range(len(test_images)):
 	while rand_label == test_label:
 		rand_label = np.random.randint(0,high=9)
 
-	adv_img = generate_adv(model, fgsm, test_image, rand_label, label=test_label)
+	adv_img = generate_adv(model, fgsm, test_image, rand_label, num=num, label=test_label, save=False)
 	gen_imgs.append(adv_img)
 	gen_labels.append(test_label)
 
