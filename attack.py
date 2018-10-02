@@ -1,20 +1,21 @@
 import numpy as np
 import tensorflow as tf
 from tensorflow import keras
+import matplotlib
 import matplotlib.pyplot as plt
 import os
+from PIL import Image
 
 DIVIDER = '---------------------------'
 TRAIN = True
 DEBUG_PRINTS = True
 BATCH_SZ = 128
-DEFAULT_EPOCHS = 10
-EPS = 0.01
+DEFAULT_EPOCHS = 15
+EPS = 0.02
 STEPS = 15
 
 class Model:
 	def __init__(self):
-
 		self.x = tf.placeholder(tf.float32, shape=(None,28,28))
 		self.labels = tf.placeholder(tf.int32, shape=(None,))
 		self.x_flat = tf.layers.Flatten()(self.x)
@@ -26,7 +27,6 @@ class Model:
 		self.init_op = tf.initializers.global_variables()
 
 		self.saver = tf.train.Saver()
-
 
 class AdvModel:
 	def __init__(self, model, eps=EPS):
@@ -85,12 +85,36 @@ def evaluate_model(session, model, test_imgs, test_labels):
 										model.labels:test_labels
 										})
 	count = 0
+
 	for i in range(len(test_labels)):
 		if res[0][i] == test_labels[i]:
 			count += 1
-	if DEBUG_PRINTS:
-		print('Accuracy:\t', count / len(test_labels) * 100.0, '%')
+	
 	return count / len(test_labels)
+
+def generate_adv(model, adv, input_img, target_class, label=1):
+	input_img_arr = [input_img]
+	adv_images = [input_img]
+
+	# iterate through model
+	for i in range(STEPS):
+		adv_images, ls = session.run([adv.x_adv, model.logits], 
+			feed_dict={
+				model.x: adv_images,
+				adv.x_input: input_img_arr,
+				adv.target_class_input: [target_class]
+		})
+
+		# Printing logits
+		# if DEBUG_PRINTS:
+		# 	print(ls)
+
+	adv_img = adv_images[0]
+
+	# Save image
+	matplotlib.pyplot.imsave('advimgs/target_' + str(target_class) + '_base_' + str(label) + '.png', adv_img)
+
+	return adv_img
 
 def setup_session(model):
 	sess = tf.Session()
@@ -109,30 +133,34 @@ if not TRAIN:
 else:
 	train_model(session, model, train_images, train_labels)
 # Evaluate model
-evaluate_model(session, model, test_images, test_labels)
+print('Base Accuracy:\t', evaluate_model(session, model, test_images, test_labels) * 100.0, '%')
 # Create FSGM method
 fgsm = AdvModel(model)
-# Input image
-adv_images = [test_images[1]]
-# iterate through model
-for i in range(STEPS):
-	adv_images, ls = session.run([fgsm.x_adv, model.logits],feed_dict={
-										model.x: adv_images,
-										fgsm.x_input: [test_images[1]],
-										fgsm.target_class_input: [5]
-	})
-	# Printing logits
-	if DEBUG_PRINTS:
-		print(ls)
 
-adv_img = adv_images[0]
-correct_pred = tf.argmax(model.logits, 1)
+# Let's try and generate some adversarial images to test against
+gen_imgs = []
+gen_labels = []
 
-res, res1 = session.run([model.logits, correct_pred], feed_dict={
-										model.x: [adv_img], 
-										model.labels: [5]
-										})
-#print(res)
-print('Predicted Class:\t', res1)
-plt.imshow(adv_img, cmap=plt.cm.binary)
-plt.show()
+num = 1
+for i in range(len(test_images)):
+	test_image = test_images[i]
+	test_label = test_labels[i]
+
+	# Pick random label
+	rand_label = np.random.randint(0,high=9)
+
+	while rand_label == test_label:
+		rand_label = np.random.randint(0,high=9)
+
+	adv_img = generate_adv(model, fgsm, test_image, rand_label, label=test_label)
+	gen_imgs.append(adv_img)
+	gen_labels.append(test_label)
+
+	if num % 1000 == 0:
+		print('Generated:\t', num + 1, ' images')
+
+	num += 1
+
+# Evaluate against generated samples
+print('Model Accuracy Against Adversarial Examples')
+print('Adversarial Accuracy:\t', evaluate_model(session, model, gen_imgs, test_labels) * 100, '%')
